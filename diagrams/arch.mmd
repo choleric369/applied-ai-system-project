@@ -1,0 +1,40 @@
+flowchart LR
+    %% --- INPUT STAGE ---
+    subgraph Input ["1. Input & Human-in-the-Loop"]
+        Human([Human Player / Reviewer])
+        Controls["UI Controls (app.py)<br/>Difficulty, Mode, Guess, Coach/Solve"]
+        Human -->|Selects Mode & Reviews AI Logs| Controls
+    end
+
+    %% --- PROCESS STAGE ---
+    subgraph Process ["2. Core Processing & Agentic Workflow"]
+        State[("Game State<br/>(st.session_state)")]
+        Agent["Agent Planner & Verifier<br/>(ai_agent.py)"]
+        Gemini["Google Gemini API<br/>(gemini-2.5-flash)"]
+        Guardrails{"Output Guardrails<br/>(JSON & Range Check)"}
+        Fallback["Deterministic Fallback<br/>(Safe Midpoint)"]
+        Engine["Game Engine<br/>(logic_utils.py)"]
+
+        Controls -->|User Action| State
+        State -->|Bounds + Turn History| Agent
+        Agent -->|1. Plan Prompt| Gemini
+        Gemini -->|JSON Strategy + Guess| Guardrails
+        Guardrails -->|Valid Int in Range| Engine
+        Guardrails -->|Out-of-Bounds / Error| Fallback
+        Fallback --> Engine
+        Engine -->|2. Act: Win / Too High / Too Low| Agent
+        Agent -->|3. Self-Verify Consistency| State
+    end
+
+    %% --- OUTPUT & TESTING STAGE ---
+    subgraph Output ["3. Output, Observability & Evaluation"]
+        UIOut["Streamlit Display<br/>Hints, Score & Agent Reasoning Log"]
+        AuditLog[("Audit Log<br/>(logs/ai_agent.log)")]
+        Tester["Reliability Evaluator<br/>(tests/test_ai_reliability.py)"]
+
+        State -->|Updated Score & Verification Badge| UIOut
+        UIOut -.->|Human Inspects Reasoning| Human
+        Guardrails -.->|Logs Interventions| AuditLog
+        Agent -.->|Logs Plan & Verify Steps| AuditLog
+        Tester -->|Automated Evals & Glitch Injection| Agent
+    end
